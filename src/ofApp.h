@@ -39,6 +39,8 @@ class ofApp : public ofBaseApp{
 
 		char cSaveFileName[256];
 
+		ofFbo fbo; // frame buffer object
+
 		// ni-DAQiAnalog Inputj‚ÉŠÖ˜A‚·‚é•Ï”
 		ofNIDAQ niDaq;
 };

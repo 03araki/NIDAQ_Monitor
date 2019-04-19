@@ -21,15 +21,18 @@ void ofApp::setup(){
 	}
 
 	// 初期画面設定
-	ofBackground(255, 255, 255);
+	ofBackground(150, 150, 150);
 	ofSetVerticalSync(true);
 	ofSetFullscreen(true);
+
+	// initialize Fbo
+	fbo.allocate(ofGetWindowWidth() - GUI_MENU_WIDTH, ofGetWindowHeight(), GL_RGB);
 
 	// GUI の表示と設定
 	string str;
 	gui = new ofxUICanvas(0, 0, GUI_MENU_WIDTH, ofGetWindowHeight());
 	//gui->setColorFill(ofxUIColor(0, 0, 0));		// フォントの色
-	gui->addLabel("Data Acquisition System", OFX_UI_FONT_LARGE);
+	gui->addLabel("Data Acquisition Monitor", OFX_UI_FONT_LARGE);
 	gui->addLabel("For NI-DAQ Device", OFX_UI_FONT_LARGE);
 	gui->addLabel(" ", OFX_UI_FONT_SMALL);
 	str = "Device: " + ofToString(niDaq.getDevName());
@@ -85,7 +88,6 @@ void ofApp::setup(){
 	gui->addLabel(" ", OFX_UI_FONT_SMALL);
 	guiExitBtn = gui->addLabelToggle("Exit Application", false);
 	
-
 	ofAddListener(gui->newGUIEvent, this, &ofApp::guiEvent);	// GUI イベント処理用関数を登録
 }
 
@@ -227,33 +229,33 @@ void ofApp::update(){
 		sprintf_s(cData, 256, "File: %s\nSaving Time: %.1f s", cSaveFileName, niDaq.getCurrentSaveTime());
 		guiTextArea->setTextString(ofToString(cData));
 	}
-}
 
-//--------------------------------------------------------------
-void ofApp::draw() {
+	// Draw graphics to frame buffer object
+	fbo.begin();
+	ofClear(0);
+
 	// データ表示ウィンドウの描画
 	int dataWindowWidth = ofGetWindowWidth() - GUI_MENU_WIDTH;
 	int dataWindowHeight = ofGetWindowHeight();
-	ofTranslate(GUI_MENU_WIDTH, 0);
 	ofSetColor(0, 0, 0);
-	ofRect(0, 0, dataWindowWidth, dataWindowHeight);
+	ofDrawRectangle(0, 0, dataWindowWidth, dataWindowHeight);
 
 	// 時間のグリッド
 	ofSetLineWidth(1);
 	ofSetColor(80, 80, 80);
 	for (int i = 1; i < niDaq.getCurrentDispTime(); i++)
-		ofLine(i*(dataWindowWidth / (double)niDaq.getCurrentDispTime()), 0,
+		ofDrawLine(i*(dataWindowWidth / (double)niDaq.getCurrentDispTime()), 0,
 			i*(dataWindowWidth / (double)niDaq.getCurrentDispTime()), dataWindowHeight);
 	// 信号のベースライン (0 V ライン)
 	float fDataHeight = dataWindowHeight / (double)niDaq.getCurrentAINumCh();
 	float fCenter = fDataHeight / 2.0;
 	for (int i = 0; i < niDaq.getCurrentAINumCh(); i++)
-		ofLine(0, i * fDataHeight + fCenter, dataWindowWidth, i * fDataHeight + fCenter);
+		ofDrawLine(0, i * fDataHeight + fCenter, dataWindowWidth, i * fDataHeight + fCenter);
 	// チャンネルごとのグリッド
 	ofSetLineWidth(2);
 	ofSetColor(150, 150, 150);
 	for (int i = 1; i < niDaq.getCurrentAINumCh(); i++) {
-		ofLine(0, i*(dataWindowHeight / (double)niDaq.getCurrentAINumCh()),
+		ofDrawLine(0, i*(dataWindowHeight / (double)niDaq.getCurrentAINumCh()),
 			dataWindowWidth, i*(dataWindowHeight / (double)niDaq.getCurrentAINumCh()));
 	}
 
@@ -279,7 +281,7 @@ void ofApp::draw() {
 		case 14: ofSetColor(135, 231, 176); break;	// 明るい緑
 		case 15: ofSetColor(199, 178, 222);	break; // 明るい紫
 		}
-		
+
 		if (niDaq.isDataAquisition()) {
 			ofNoFill();
 			ofSetLineWidth(2);
@@ -299,12 +301,18 @@ void ofApp::draw() {
 	// トレースラインの表示
 	if (niDaq.isDataAquisition()) {
 		ofSetColor(200, 200, 200);
-		ofSetLineWidth(4);
-		ofLine(dataWindowWidth * ((niDaq.getCurrentDispBufNum() - 1) / (double)(niDaq.getDispBufNum() - 1)), 0,
+		ofSetLineWidth(2);
+		ofDrawLine(dataWindowWidth * ((niDaq.getCurrentDispBufNum() - 1) / (double)(niDaq.getDispBufNum() - 1)), 0,
 			dataWindowWidth * ((niDaq.getCurrentDispBufNum() - 1) / (double)(niDaq.getDispBufNum() - 1)), dataWindowHeight);
 	}
-	
-	ofTranslate(-GUI_MENU_WIDTH, 0);
+
+	fbo.end();
+}
+
+//--------------------------------------------------------------
+void ofApp::draw() {
+	// draw graphics using frame buffer object
+	fbo.draw(GUI_MENU_WIDTH + 1, 0, ofGetWindowWidth() - GUI_MENU_WIDTH, ofGetWindowHeight());
 }
 
 //--------------------------------------------------------------

@@ -209,8 +209,6 @@ int32 CVICALLBACK ofNIDAQ::AIEveryNCallback(TaskHandle taskHandle, int32 everyNs
 		niDaq->m_iDataCounter = (niDaq->m_iDataCounter + 1) % niDaq->m_uiDispBufNum;
 	}
 
-	//printf("call.\n");
-
 	return 0;
 }
 

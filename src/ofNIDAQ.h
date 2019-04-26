@@ -9,10 +9,14 @@
 
 #define DAQmxErrChk(functionCall) if(DAQmxFailed(error=(fanctionCall))) goto Error; else
 
+// FFTW library (libfftw3-3.lib, libfftw3-3.dll required)
+#include "fftw3.h"
+#pragma comment(lib, "libfftw3-3.lib")
 
 // OpenFrameworks のライブラリ
 #include "ofMain.h"
 
+#define MAX_AI_NUM	16
 
 class ofNIDAQ {
 public:
@@ -59,6 +63,12 @@ private:
 	unsigned int	m_uiDispBufNum;		// 表示用データバッファ数
 	unsigned int	m_uiUpdatePeriod;	// 表示用データバッファの更新周期
 	unsigned int	m_uiDispTimeSec;	// 表示時間 (sec)
+
+	// parameters for spectrum of measured data
+	bool			m_bDFTAnalysis;
+	fftw_complex*	m_srcData[MAX_AI_NUM];
+	fftw_complex*	m_dstData[MAX_AI_NUM];
+	fftw_plan		fftPlan[MAX_AI_NUM];
 
 	int				m_iLoopCounter;
 	int				m_iDataCounter;

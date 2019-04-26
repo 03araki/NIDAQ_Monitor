@@ -129,6 +129,21 @@ bool ofNIDAQ::initAISetting(int iNumCh, float fFreq, int iDispTimeSec)
 	m_uiDispBufNum = m_uiDispBufNum / m_uiUpdatePeriod;			// 更新周期によりバッファ数を補正
 	//printf("%d, %d\n", m_uiDispBufNum, m_uiUpdatePeriod);
 	m_pdDispBuf = new double[m_uiDispBufNum * m_iAINumCh];
+
+	// Data Buffer for FFT
+	for (int i = 0; i < MAX_AI_NUM; i++) {
+		fftw_free(m_srcData[i]);
+		fftw_free(m_dstData[i]);
+		m_srcData[i] = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * m_fAIFreq);
+		m_dstData[i] = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * m_fAIFreq);
+		fftPlan[i] = fftw_plan_dft_1d((int)m_fAIFreq, m_srcData[i], m_dstData[i], FFTW_FORWARD, FFTW_ESTIMATE);
+		for (int j = 0; j < (int)m_fAIFreq; j++) {
+			m_srcData[i][j][0] = 0;	// real part
+			m_srcData[i][j][1] = 0;	// imaginary part
+		}
+	}
+	
+
 	return true;
 }
 
@@ -207,6 +222,13 @@ int32 CVICALLBACK ofNIDAQ::AIEveryNCallback(TaskHandle taskHandle, int32 everyNs
 			niDaq->m_pdDispBuf[niDaq->m_iDataCounter * niDaq->m_iAINumCh + i]
 				= niDaq->m_pdAIData[(niDaq->m_ulSmplEventNum - 1)*niDaq->m_iAINumCh + i];
 		niDaq->m_iDataCounter = (niDaq->m_iDataCounter + 1) % niDaq->m_uiDispBufNum;
+	}
+
+	// store data for DFT and calculate
+	if (niDaq->m_bDFTAnalysis) {
+		for (int i = 0; i < niDaq->m_iAINumCh; i++) {
+			
+		}
 	}
 
 	return 0;

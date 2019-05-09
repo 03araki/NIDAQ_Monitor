@@ -38,13 +38,12 @@ void ofApp::setup(){
 	str = "Device: " + ofToString(niDaq.getDevName());
 	gui->addLabel(str, OFX_UI_FONT_LARGE);
 	gui->addLabel(" ", OFX_UI_FONT_SMALL);
-
 	gui->addSpacer();
 	gui->addLabel("Analog Input Setting", OFX_UI_FONT_LARGE);
 	gui->addLabel(" ", OFX_UI_FONT_SMALL);
 	gui->addLabel("Sampling Frequency [>=200 Hz]", OFX_UI_FONT_MEDIUM);
 	char cFreq[20];
-	sprintf_s(cFreq, 20, "%.1f", niDaq.getCurrentAIFreq());
+	sprintf_s(cFreq, 20, "%d", niDaq.getCurrentAIFreq());
 	guiTextSmplFreq = gui->addTextInput("SmplFreq", ofToString(cFreq), OFX_UI_FONT_MEDIUM);
 	guiTextSmplFreq->setAutoClear(false);
 	gui->addLabel(" ", OFX_UI_FONT_SMALL);
@@ -68,10 +67,18 @@ void ofApp::setup(){
 	
 	}
 	gui->addLabel(" ", OFX_UI_FONT_SMALL);
-	gui->addLabel("Window Width [sec]", OFX_UI_FONT_MEDIUM);
-	guiTextDispTime = gui->addTextInput("Interval", ofToString(niDaq.getCurrentDispTime()), OFX_UI_FONT_MEDIUM);
+	gui->addSpacer();
+	gui->addLabel("Display Mode", OFX_UI_FONT_MEDIUM);
+	gui->setWidgetFontSize(OFX_UI_FONT_MEDIUM);
+	guiModeBtn = gui->addLabelToggle("Time Domain", false);
+	
+	gui->addLabel(" ", OFX_UI_FONT_SMALL);
+	guiParamLabel = gui->addLabel("Parameter", OFX_UI_FONT_MEDIUM);
+	guiParamLabel->setLabel("Display Interval [sec]");
+	guiTextParamValue = gui->addTextInput("Value", ofToString(niDaq.getCurrentDispTime()), OFX_UI_FONT_MEDIUM);
 	gui->addLabel(" ", OFX_UI_FONT_SMALL);
 	gui->setWidgetFontSize(OFX_UI_FONT_MEDIUM);
+	
 	guiSmplBtn = gui->addLabelToggle("Start Data Sampling", niDaq.isDataAquisition());
 	gui->addLabel(" ", OFX_UI_FONT_SMALL);
 	gui->setWidgetFontSize(OFX_UI_FONT_MEDIUM);
@@ -89,6 +96,8 @@ void ofApp::setup(){
 	guiExitBtn = gui->addLabelToggle("Exit Application", false);
 	
 	ofAddListener(gui->newGUIEvent, this, &ofApp::guiEvent);	// GUI イベント処理用関数を登録
+
+	iMaxFreq = (int) floor(niDaq.getCurrentAIFreq()/2.0);
 }
 
 //--------------------------------------------------------------
@@ -96,25 +105,26 @@ void ofApp::guiEvent(ofxUIEventArgs &e) {
 	char cFreq[20];
 	if (e.widget->getName() == "SmplFreq") {	// 周波数設定が変更された場合
 		if (niDaq.isDataAquisition()) {
-			sprintf_s(cFreq, 20, "%.1f", niDaq.getCurrentAIFreq());
+			sprintf_s(cFreq, 20, "d", niDaq.getCurrentAIFreq());
 			guiTextSmplFreq->setTextString(ofToString(cFreq));
 		}
 		else {
 			string str = guiTextSmplFreq->getTextString();
-			if (atof(str.c_str()) < 200) {
-				sprintf_s(cFreq, 20, "%.1f", niDaq.getCurrentAIFreq());
+			if (atoi(str.c_str()) < 200) {
+				sprintf_s(cFreq, 20, "d", niDaq.getCurrentAIFreq());
 				guiTextSmplFreq->setTextString(ofToString(cFreq));
 			}
 			else {
-				if (!niDaq.initAISetting(niDaq.getCurrentAINumCh(), atof(str.c_str()), niDaq.getCurrentDispTime())) {
+				if (!niDaq.initAISetting(niDaq.getCurrentAINumCh(), atoi(str.c_str()), niDaq.getCurrentDispTime())) {
 					printf("device initialization error.\n");
 					ofExit();
 				}
-				sprintf_s(cFreq, 20, "%.1f", niDaq.getCurrentAIFreq());
+				sprintf_s(cFreq, 20, "%d", niDaq.getCurrentAIFreq());
 				guiTextSmplFreq->setTextString(ofToString(cFreq));
 			}
 			
 		}
+		iMaxFreq = (int) floor(niDaq.getCurrentAIFreq()/2.0);
 	}
 	else if (e.widget->getName() == "Start Data Sampling") {	// データサンプリング
 		if (guiSmplBtn->getValue()) niDaq.startAISampling();
@@ -151,26 +161,36 @@ void ofApp::guiEvent(ofxUIEventArgs &e) {
 			guiSaveBtn->setLabelText("Start Data Saving");
 		}
 	}
-	else if (e.widget->getName() == "Interval") {
+	else if (e.widget->getName() == "Value") {
 		char cInterval[20];
-		if (niDaq.isDataAquisition()) {
-			sprintf_s(cInterval, 20, "%d", niDaq.getCurrentDispTime());
-			guiTextDispTime->setTextString(ofToString(cInterval));
-		}
-		else {
-			string str = guiTextDispTime->getTextString();
-			if (atoi(str.c_str()) < 2 || atoi(str.c_str()) > 30) {
+		if (!guiModeBtn->getValue()) { // Time Domain
+			if (niDaq.isDataAquisition()) {
 				sprintf_s(cInterval, 20, "%d", niDaq.getCurrentDispTime());
-				guiTextDispTime->setTextString(ofToString(cInterval));
+				guiTextParamValue->setTextString(ofToString(cInterval));
 			}
 			else {
-				if (!niDaq.initAISetting(niDaq.getCurrentAINumCh(), niDaq.getCurrentAIFreq(), atoi(str.c_str()))) {
-					printf("device initialization error.\n");
-					ofExit();
+				string str = guiTextParamValue->getTextString();
+				if (atoi(str.c_str()) < 2 || atoi(str.c_str()) > 30) {
+					sprintf_s(cInterval, 20, "%d", niDaq.getCurrentDispTime());
+					guiTextParamValue->setTextString(ofToString(cInterval));
 				}
+				else {
+					if (!niDaq.initAISetting(niDaq.getCurrentAINumCh(), niDaq.getCurrentAIFreq(), atoi(str.c_str()))) {
+						printf("device initialization error.\n");
+						ofExit();
+					}
+				}
+				sprintf_s(cInterval, 20, "%d", niDaq.getCurrentDispTime());
+				guiTextParamValue->setTextString(ofToString(cInterval));
 			}
-			sprintf_s(cInterval, 20, "%d", niDaq.getCurrentDispTime());
-			guiTextDispTime->setTextString(ofToString(cInterval));
+		}
+		else {
+			string str = guiTextParamValue->getTextString();
+			if (atoi(str.c_str()) > 0 && atoi(str.c_str()) <= (int)floor(niDaq.getCurrentAIFreq() / 2.0)) { // possible range
+				iMaxFreq = atoi(str.c_str());
+			}
+			sprintf_s(cInterval, 20, "%d", iMaxFreq);
+			guiTextParamValue->setTextString(ofToString(cInterval));
 		}
 	}
 	else if (e.widget->getName() == "Full Screen Mode") {
@@ -180,6 +200,21 @@ void ofApp::guiEvent(ofxUIEventArgs &e) {
 		if (niDaq.isDataSaving()) niDaq.stopSaveData();
 		if (niDaq.isDataAquisition()) niDaq.stopAISampling();
 		ofExit();
+	}
+	else if (e.widget->getName() == "Time Domain") {
+		char cInterval[20];
+		if (guiModeBtn->getValue()) {
+			guiModeBtn->setLabelText("Frequency Domain");
+			guiParamLabel->setLabel("Display Interval [Hz]");
+			sprintf_s(cInterval, 20, "%d", iMaxFreq);
+			guiTextParamValue->setTextString(ofToString(cInterval));
+		}
+		else {
+			guiModeBtn->setLabelText("Time Domain");
+			guiParamLabel->setLabel("Display Interval [sec]");
+			sprintf_s(cInterval, 20, "%d", niDaq.getCurrentDispTime());
+			guiTextParamValue->setTextString(ofToString(cInterval));
+		}
 	}
 
 	else if(!bTMStatus) { // Toggle Matrix が押された時の処理（なぜか e.widget では detect できない ...）
@@ -237,73 +272,132 @@ void ofApp::update(){
 	// データ表示ウィンドウの描画
 	int dataWindowWidth = ofGetWindowWidth() - GUI_MENU_WIDTH;
 	int dataWindowHeight = ofGetWindowHeight();
-	ofSetColor(0, 0, 0);
-	ofDrawRectangle(0, 0, dataWindowWidth, dataWindowHeight);
-
-	// 時間のグリッド
-	ofSetLineWidth(1);
-	ofSetColor(80, 80, 80);
-	for (int i = 1; i < niDaq.getCurrentDispTime(); i++)
-		ofDrawLine(i*(dataWindowWidth / (double)niDaq.getCurrentDispTime()), 0,
-			i*(dataWindowWidth / (double)niDaq.getCurrentDispTime()), dataWindowHeight);
-	// 信号のベースライン (0 V ライン)
 	float fDataHeight = dataWindowHeight / (double)niDaq.getCurrentAINumCh();
 	float fCenter = fDataHeight / 2.0;
-	for (int i = 0; i < niDaq.getCurrentAINumCh(); i++)
-		ofDrawLine(0, i * fDataHeight + fCenter, dataWindowWidth, i * fDataHeight + fCenter);
-	// チャンネルごとのグリッド
-	ofSetLineWidth(2);
-	ofSetColor(150, 150, 150);
-	for (int i = 1; i < niDaq.getCurrentAINumCh(); i++) {
-		ofDrawLine(0, i*(dataWindowHeight / (double)niDaq.getCurrentAINumCh()),
-			dataWindowWidth, i*(dataWindowHeight / (double)niDaq.getCurrentAINumCh()));
-	}
-
-	// チャンネルごとのデータの描画
-	float64* DispBuf = niDaq.getDispBuf();
-	for (int i = 0; i < niDaq.getCurrentAINumCh(); i++) {
-		// データライン
-		switch (i) {
-		case 0: ofSetColor(255, 40, 0);	break;	// 赤
-		case 1: ofSetColor(255, 245, 0); break;		// 黄
-		case 2: ofSetColor(53, 161, 107); break;	// 緑
-		case 3: ofSetColor(0, 65, 255);	break;	// 青
-		case 4: ofSetColor(102, 204, 255); break; // 空色
-		case 5: ofSetColor(255, 153, 160); break;	// ピンク
-		case 6: ofSetColor(255, 153, 0); break;		// オレンジ
-		case 7: ofSetColor(154, 0, 121); break;		// 紫
-		case 8: ofSetColor(102, 51, 0);	break;	// 茶
-		case 9: ofSetColor(255, 209, 209); break;	// 明るいピンク
-		case 10: ofSetColor(255, 255, 153); break;	// クリーム
-		case 11: ofSetColor(203, 242, 102); break;	// 明るい黄緑
-		case 12: ofSetColor(180, 235, 250); break;	// 明るい空色
-		case 13: ofSetColor(237, 197, 143); break;	// ベージュ
-		case 14: ofSetColor(135, 231, 176); break;	// 明るい緑
-		case 15: ofSetColor(199, 178, 222);	break; // 明るい紫
-		}
-
-		if (niDaq.isDataAquisition()) {
-			ofNoFill();
-			ofSetLineWidth(2);
-			ofBeginShape();
-			for (int j = 0; j < niDaq.getDispBufNum(); j++) {
-				ofVertex(dataWindowWidth * (j / (double)(niDaq.getDispBufNum() - 1)),
-					((-1 * DispBuf[j * niDaq.getCurrentAINumCh() + i] + 10) / 20.0) * fDataHeight);
-			}
-			ofEndShape();
-			ofFill();
-		}
-		ofDrawBitmapString(ofToString(i + 1) + " Ch", 10, 20);
-		ofTranslate(0, fDataHeight);
-	}
-	ofTranslate(0, -dataWindowHeight);
-
-	// トレースラインの表示
-	if (niDaq.isDataAquisition()) {
-		ofSetColor(200, 200, 200);
+	ofSetColor(0, 0, 0);
+	ofDrawRectangle(0, 0, dataWindowWidth, dataWindowHeight);
+	
+	if (!guiModeBtn->getValue()) {	// Draw time domain data
+		// 時間のグリッド
+		ofSetLineWidth(1);
+		ofSetColor(80, 80, 80);
+		for (int i = 1; i < niDaq.getCurrentDispTime(); i++)
+			ofDrawLine(i*(dataWindowWidth / (double)niDaq.getCurrentDispTime()), 0,
+				i*(dataWindowWidth / (double)niDaq.getCurrentDispTime()), dataWindowHeight);
+		// 信号のベースライン (0 V ライン)
+		for (int i = 0; i < niDaq.getCurrentAINumCh(); i++)
+			ofDrawLine(0, i * fDataHeight + fCenter, dataWindowWidth, i * fDataHeight + fCenter);
+		// チャンネルごとのグリッド
 		ofSetLineWidth(2);
-		ofDrawLine(dataWindowWidth * ((niDaq.getCurrentDispBufNum() - 1) / (double)(niDaq.getDispBufNum() - 1)), 0,
-			dataWindowWidth * ((niDaq.getCurrentDispBufNum() - 1) / (double)(niDaq.getDispBufNum() - 1)), dataWindowHeight);
+		ofSetColor(150, 150, 150);
+		for (int i = 1; i < niDaq.getCurrentAINumCh(); i++) {
+			ofDrawLine(0, i*(dataWindowHeight / (double)niDaq.getCurrentAINumCh()),
+				dataWindowWidth, i*(dataWindowHeight / (double)niDaq.getCurrentAINumCh()));
+		}
+
+		// チャンネルごとのデータの描画
+		float64* DispBuf = niDaq.getDispBuf();
+		for (int i = 0; i < niDaq.getCurrentAINumCh(); i++) {
+			// データライン
+			switch (i) {
+			case 0: ofSetColor(255, 40, 0);	break;	// 赤
+			case 1: ofSetColor(255, 245, 0); break;		// 黄
+			case 2: ofSetColor(53, 161, 107); break;	// 緑
+			case 3: ofSetColor(0, 65, 255);	break;	// 青
+			case 4: ofSetColor(102, 204, 255); break; // 空色
+			case 5: ofSetColor(255, 153, 160); break;	// ピンク
+			case 6: ofSetColor(255, 153, 0); break;		// オレンジ
+			case 7: ofSetColor(154, 0, 121); break;		// 紫
+			case 8: ofSetColor(102, 51, 0);	break;	// 茶
+			case 9: ofSetColor(255, 209, 209); break;	// 明るいピンク
+			case 10: ofSetColor(255, 255, 153); break;	// クリーム
+			case 11: ofSetColor(203, 242, 102); break;	// 明るい黄緑
+			case 12: ofSetColor(180, 235, 250); break;	// 明るい空色
+			case 13: ofSetColor(237, 197, 143); break;	// ベージュ
+			case 14: ofSetColor(135, 231, 176); break;	// 明るい緑
+			case 15: ofSetColor(199, 178, 222);	break; // 明るい紫
+			}
+
+			if (niDaq.isDataAquisition()) {
+				ofNoFill();
+				ofSetLineWidth(2);
+				ofBeginShape();
+				for (int j = 0; j < niDaq.getDispBufNum(); j++) {
+					ofVertex(dataWindowWidth * (j / (double)(niDaq.getDispBufNum() - 1)),
+						((-1 * DispBuf[j * niDaq.getCurrentAINumCh() + i] + 10) / 20.0) * fDataHeight);
+				}
+				ofEndShape();
+				ofFill();
+			}
+			ofDrawBitmapString(ofToString(i + 1) + " Ch", 10, 20);
+			ofTranslate(0, fDataHeight);
+		}
+		ofTranslate(0, -dataWindowHeight);
+
+		// トレースラインの表示
+		if (niDaq.isDataAquisition()) {
+			ofSetColor(200, 200, 200);
+			ofSetLineWidth(2);
+			ofDrawLine(dataWindowWidth * ((niDaq.getCurrentDispBufNum() - 1) / (double)(niDaq.getDispBufNum() - 1)), 0,
+				dataWindowWidth * ((niDaq.getCurrentDispBufNum() - 1) / (double)(niDaq.getDispBufNum() - 1)), dataWindowHeight);
+		}
+	}
+	else {	// draw frequency domain data
+		// grid for frequencies
+		ofSetLineWidth(1);
+		ofSetColor(80, 80, 80);
+		for (int i = 1; i < iMaxFreq; i+=1)
+			ofDrawLine(i*(dataWindowWidth / (double)iMaxFreq), 0,
+				i*(dataWindowWidth / (double)iMaxFreq), dataWindowHeight);
+		ofSetLineWidth(2);
+		ofSetColor(150, 150, 150);
+		for (int i = 10; i < iMaxFreq; i += 10)
+			ofDrawLine(i*(dataWindowWidth / (double)iMaxFreq), 0,
+				i*(dataWindowWidth / (double)iMaxFreq), dataWindowHeight);
+		// separate line for channels
+		for (int i = 1; i < niDaq.getCurrentAINumCh(); i++) {
+			ofDrawLine(0, i*(dataWindowHeight / (double)niDaq.getCurrentAINumCh()),
+				dataWindowWidth, i*(dataWindowHeight / (double)niDaq.getCurrentAINumCh()));
+		}
+
+		// チャンネルごとのデータの描画
+		for (int i = 0; i < niDaq.getCurrentAINumCh(); i++) {
+			double* DataBuf = niDaq.getSpectrumBuf(i);
+
+			// データライン
+			switch (i) {
+			case 0: ofSetColor(255, 40, 0);	break;	// 赤
+			case 1: ofSetColor(255, 245, 0); break;		// 黄
+			case 2: ofSetColor(53, 161, 107); break;	// 緑
+			case 3: ofSetColor(0, 65, 255);	break;	// 青
+			case 4: ofSetColor(102, 204, 255); break; // 空色
+			case 5: ofSetColor(255, 153, 160); break;	// ピンク
+			case 6: ofSetColor(255, 153, 0); break;		// オレンジ
+			case 7: ofSetColor(154, 0, 121); break;		// 紫
+			case 8: ofSetColor(102, 51, 0);	break;	// 茶
+			case 9: ofSetColor(255, 209, 209); break;	// 明るいピンク
+			case 10: ofSetColor(255, 255, 153); break;	// クリーム
+			case 11: ofSetColor(203, 242, 102); break;	// 明るい黄緑
+			case 12: ofSetColor(180, 235, 250); break;	// 明るい空色
+			case 13: ofSetColor(237, 197, 143); break;	// ベージュ
+			case 14: ofSetColor(135, 231, 176); break;	// 明るい緑
+			case 15: ofSetColor(199, 178, 222);	break; // 明るい紫
+			}
+
+			if (niDaq.isDataAquisition()) {
+				ofNoFill();
+				ofSetLineWidth(2);
+				ofBeginShape();
+				for (int j = 0; j <= iMaxFreq; j++) {
+					ofVertex(dataWindowWidth * (j / (double)(iMaxFreq)), (1 - DataBuf[j]) * fDataHeight);
+				}
+				ofEndShape();
+				ofFill();
+			}
+			ofDrawBitmapString(ofToString(i + 1) + " Ch", 10, 20);
+			ofTranslate(0, fDataHeight);
+		}
+		ofTranslate(0, -dataWindowHeight);
 	}
 
 	fbo.end();

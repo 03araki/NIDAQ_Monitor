@@ -27,7 +27,7 @@ public:
 	char* getDevName() { return ((m_iDevIndex < 0) ? NULL : m_cDevName); };		// デバイス名の取得
 	int getDevAIMaxNum() { return m_iAIMaxNumCh; };		// PC に接続されている DAQ デバイスの Analog Input の最大チャンネル数を取得
 	int getCurrentAINumCh() { return m_iAINumCh; };		// 現在の Analog Input の設定チャンネル数を取得
-	float getCurrentAIFreq() { return m_fAIFreq; };		// 現在の Analog Input のサンプリング周波数
+	int getCurrentAIFreq() { return m_iAIFreq; };		// 現在の Analog Input のサンプリング周波数
 	int getCurrentDispTime() { return m_uiDispTimeSec; }; // 表示時間を取得
 	bool isDataAquisition() { return m_bAqStatus; };	// 計測中であるかどうかを取得
 	bool startSaveData(char* saveFilePath);				// ファイルの保存開始
@@ -39,11 +39,13 @@ public:
 	float64* getDispBuf() { return m_pdDispBuf; };		// 表示用バッファの取得
 	int getCurrentDispBufNum() { return m_iDataCounter; };		// 表示用バッファにおける現在のデータ位置の取得
 
-	bool initAISetting(int iNumCh, float fFreq, int iDispTimeSec );		// Analog Input 設定の初期化
+	bool initAISetting(int iNumCh, int iFreq, int iDispTimeSec );		// Analog Input 設定の初期化
 	bool cleanAISetting();		// Analog Input 設定の終了処理
 
 	bool startAISampling();		// Analog Input サンプリングを開始
 	bool stopAISampling();		// Analog Input サンプリングを終了
+
+	double* getSpectrumBuf(int iCh) { return m_FFTData[iCh]; };
 
 private:
 	TaskHandle		m_hTask;			// NI-DAQ を扱うデバイスハンドル
@@ -53,7 +55,7 @@ private:
 	int				m_iAIMaxNumCh;		// PC に接続されている DAQ デバイスの Analog Input の最大チャンネル数
 	int				m_iTermConf;		// PC に接続されている DAQ デバイスの A/D 変換方式
 	int				m_iAINumCh;			// Analog Input のチャンネル数
-	float			m_fAIFreq;			// Analog Input のサンプリング周波数
+	int				m_iAIFreq;			// Analog Input のサンプリング周波数
 	bool			m_bAqStatus;		// 測定中であるかどうかのフラグ
 	FILE*			m_pSaveFile;		// 測定データの保存用ファイルポインタ
 
@@ -66,9 +68,14 @@ private:
 
 	// parameters for spectrum of measured data
 	bool			m_bDFTAnalysis;
-	fftw_complex*	m_srcData[MAX_AI_NUM];
-	fftw_complex*	m_dstData[MAX_AI_NUM];
+	double*			m_srcData[MAX_AI_NUM];
+	double*			m_FFTData[MAX_AI_NUM];
+	int				m_iNumFFTData;
+	fftw_complex*	m_srcFFTWData[MAX_AI_NUM];
+	fftw_complex*	m_dstFFTWData[MAX_AI_NUM];
 	fftw_plan		fftPlan[MAX_AI_NUM];
+	double			m_fOverLap;
+	int				m_iFFTWDataCounter;
 
 	int				m_iLoopCounter;
 	int				m_iDataCounter;

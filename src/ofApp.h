@@ -27,12 +27,14 @@ class ofApp : public ofBaseApp{
 		ofxUICanvas *gui;
 		ofxUITextInput *guiTextSmplFreq;
 		ofxUIToggleMatrix *guiTM;
+		ofxUILabelToggle *guiModeBtn;
 		ofxUILabelToggle *guiSmplBtn;
 		ofxUILabelToggle *guiFullScrBtn;
 		ofxUILabelToggle *guiExitBtn;
 		ofxUILabelToggle *guiSaveBtn;
 		ofxUITextArea  *guiTextArea;
-		ofxUITextInput *guiTextDispTime;
+		ofxUILabel *guiParamLabel;
+		ofxUITextInput *guiTextParamValue;
 
 		bool bTMStatus;
 		void guiEvent(ofxUIEventArgs &e);	// gui のイベント処理関数
@@ -43,4 +45,7 @@ class ofApp : public ofBaseApp{
 
 		// ni-DAQ（Analog Input）に関連する変数
 		ofNIDAQ niDaq;
+
+		// fft analyzer parameter
+		int iMaxFreq;
 };

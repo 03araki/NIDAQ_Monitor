@@ -6,7 +6,7 @@ ofNIDAQ::ofNIDAQ()
 	m_iDevIndex = -1;
 	m_uiDevID = 0;
 	m_bAqStatus = false;
-	m_fAIFreq = 1000;
+	m_iAIFreq = 1000;
 
 	m_pdAIData = NULL;
 	m_pdDispBuf = NULL;
@@ -16,6 +16,14 @@ ofNIDAQ::ofNIDAQ()
 	m_pSaveFile = NULL;
 	m_bDataSaveStatus = false;
 	m_dTimeSavingData = 0;
+
+	for (int i = 0; i < MAX_AI_NUM; i++) {
+		m_srcData[i] = NULL;
+		m_FFTData[i] = NULL;
+	}
+	m_bDFTAnalysis = true;
+	m_iFFTWDataCounter = 0;
+	m_fOverLap = 0.8;
 }
 
 ofNIDAQ::~ofNIDAQ()
@@ -81,7 +89,7 @@ bool ofNIDAQ::stopSaveData()
 }
 
 // Analog Input 設定の初期化
-bool ofNIDAQ::initAISetting(int iNumCh, float fFreq, int iDispTimeSec)
+bool ofNIDAQ::initAISetting(int iNumCh, int iFreq, int iDispTimeSec)
 {
 	if (m_iDevIndex < 0) {	// 接続されている DAQ デバイスの確認が終わっていない場合
 		if (!chkConnectedDev()) return false;
@@ -110,21 +118,21 @@ bool ofNIDAQ::initAISetting(int iNumCh, float fFreq, int iDispTimeSec)
 	// Analog Input の初期化
 	if (DAQmxFailed(DAQmxCreateAIVoltageChan(m_hTask, cPhysicalChan, "", m_iTermConf, -10.0, 10.0, DAQmx_Val_Volts, NULL))) return false;
 	// サンプリングタイミング設定
-	m_ulSmplEventNum = (unsigned long) floor(fFreq / 200.0); // 一度に取得するデータ数
-	if (DAQmxFailed(DAQmxCfgSampClkTiming(m_hTask, "", fFreq, DAQmx_Val_Rising, DAQmx_Val_ContSamps, m_ulSmplEventNum))) return false;
+	m_ulSmplEventNum = (unsigned long) floor(iFreq / 200.0); // 一度に取得するデータ数
+	if (DAQmxFailed(DAQmxCfgSampClkTiming(m_hTask, "", iFreq, DAQmx_Val_Rising, DAQmx_Val_ContSamps, m_ulSmplEventNum))) return false;
 	// 指定サンプリング回数毎に呼ばれるコールバック関数の登録
 	if (DAQmxFailed(DAQmxRegisterEveryNSamplesEvent(m_hTask, DAQmx_Val_Acquired_Into_Buffer, m_ulSmplEventNum, 0, AIEveryNCallback, (void *)this))) return false;
 	// タスク終了時に呼び出されるコールバック関数の登録
 	if (DAQmxFailed(DAQmxRegisterDoneEvent(m_hTask, 0, AIDoneCallback, (void*) this))) return false;
 
 	m_iAINumCh = iNumCh;
-	m_fAIFreq = fFreq;
+	m_iAIFreq = iFreq;
 	m_uiDispTimeSec = iDispTimeSec;
 
 	// データバッファ領域の確保
 	m_pdAIData = new float64[m_iAINumCh * m_ulSmplEventNum];
 
-	m_uiDispBufNum = m_uiDispTimeSec * (int)round(m_fAIFreq / m_ulSmplEventNum);		// ディスプレイ用バッファの数
+	m_uiDispBufNum = m_uiDispTimeSec * (int)round(m_iAIFreq / (double)m_ulSmplEventNum);		// ディスプレイ用バッファの数
 	m_uiUpdatePeriod = (int) ceil(m_uiDispBufNum / 2000.0);		// データの更新周期
 	m_uiDispBufNum = m_uiDispBufNum / m_uiUpdatePeriod;			// 更新周期によりバッファ数を補正
 	//printf("%d, %d\n", m_uiDispBufNum, m_uiUpdatePeriod);
@@ -132,14 +140,25 @@ bool ofNIDAQ::initAISetting(int iNumCh, float fFreq, int iDispTimeSec)
 
 	// Data Buffer for FFT
 	for (int i = 0; i < MAX_AI_NUM; i++) {
-		fftw_free(m_srcData[i]);
-		fftw_free(m_dstData[i]);
-		m_srcData[i] = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * m_fAIFreq);
-		m_dstData[i] = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * m_fAIFreq);
-		fftPlan[i] = fftw_plan_dft_1d((int)m_fAIFreq, m_srcData[i], m_dstData[i], FFTW_FORWARD, FFTW_ESTIMATE);
-		for (int j = 0; j < (int)m_fAIFreq; j++) {
-			m_srcData[i][j][0] = 0;	// real part
-			m_srcData[i][j][1] = 0;	// imaginary part
+		// allocate and initialize temporal data buffer
+		delete[] m_srcData[i];
+		m_srcData[i] = new double[m_iAIFreq];
+		for (int j = 0; j < m_iAIFreq; j++) m_srcData[i][j] = 0;
+		// allocate and initialize FFT result data buffer
+		delete[] m_FFTData[i];
+		m_iNumFFTData = (int)floor(m_iAIFreq / 2.0) + 1;
+		m_FFTData[i] = new double[m_iNumFFTData];
+		for (int j = 0; j < m_iNumFFTData; j++) m_FFTData[i][j] = 0;
+
+		// allocate and initialize data buffer for FFTW
+		fftw_free(m_srcFFTWData[i]);
+		fftw_free(m_dstFFTWData[i]);
+		m_srcFFTWData[i] = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * m_iAIFreq);
+		m_dstFFTWData[i] = (fftw_complex *)fftw_malloc(sizeof(fftw_complex) * m_iAIFreq);
+		fftPlan[i] = fftw_plan_dft_1d(m_iAIFreq, m_srcFFTWData[i], m_dstFFTWData[i], FFTW_FORWARD, FFTW_ESTIMATE);
+		for (int j = 0; j < m_iAIFreq; j++) {
+			m_srcFFTWData[i][j][0] = 0;	// real part
+			m_srcFFTWData[i][j][1] = 0;	// imaginary part
 		}
 	}
 	
@@ -193,7 +212,7 @@ int32 CVICALLBACK ofNIDAQ::AIEveryNCallback(TaskHandle taskHandle, int32 everyNs
 	ofNIDAQ* niDaq = (ofNIDAQ *)callbackData;
 	int32       read = 0;
 
-	float fAITimeout = niDaq->m_ulSmplEventNum * (1 / niDaq->m_fAIFreq) * 2;
+	float fAITimeout = niDaq->m_ulSmplEventNum * (1.0 / niDaq->m_iAIFreq) * 2;
 	// データの取得
 	if (DAQmxFailed(DAQmxReadAnalogF64(taskHandle, niDaq->m_ulSmplEventNum, fAITimeout,
 		DAQmx_Val_GroupByScanNumber, niDaq->m_pdAIData, niDaq->m_ulSmplEventNum * niDaq->m_iAINumCh, &read, NULL))) return false;
@@ -205,7 +224,7 @@ int32 CVICALLBACK ofNIDAQ::AIEveryNCallback(TaskHandle taskHandle, int32 everyNs
 			for (int j = 0; j < niDaq->m_iAINumCh; j++)
 				fprintf(niDaq->m_pSaveFile, ",%lf", niDaq->m_pdAIData[i * niDaq->m_iAINumCh + j]);
 			fprintf(niDaq->m_pSaveFile, "\n");
-			niDaq->m_dTimeSavingData += (1 / niDaq->m_fAIFreq);
+			niDaq->m_dTimeSavingData += (1.0 / niDaq->m_iAIFreq);
 		}
 	}
 
@@ -224,10 +243,37 @@ int32 CVICALLBACK ofNIDAQ::AIEveryNCallback(TaskHandle taskHandle, int32 everyNs
 		niDaq->m_iDataCounter = (niDaq->m_iDataCounter + 1) % niDaq->m_uiDispBufNum;
 	}
 
-	// store data for DFT and calculate
 	if (niDaq->m_bDFTAnalysis) {
+		// store data for DFT
 		for (int i = 0; i < niDaq->m_iAINumCh; i++) {
-			
+			memcpy(niDaq->m_srcData[i], niDaq->m_srcData[i] + niDaq->m_ulSmplEventNum, 
+				sizeof(double)*(niDaq->m_iAIFreq - niDaq->m_ulSmplEventNum));
+			for (int j = 0; j < niDaq->m_ulSmplEventNum; j++) {
+				niDaq->m_srcData[i][niDaq->m_iAIFreq - niDaq->m_ulSmplEventNum + j]
+					= niDaq->m_pdAIData[j * niDaq->m_iAINumCh + i];
+			}
+		}
+		niDaq->m_iFFTWDataCounter += niDaq->m_ulSmplEventNum;
+
+		// calculate DFT
+		if (niDaq->m_iFFTWDataCounter >= (int)ceil(niDaq->m_iAIFreq * (1 - niDaq->m_fOverLap))) {
+			for (int i = 0; i < niDaq->m_iAINumCh; i++) {
+				// calculate signal mean due to detrend
+				double signalMean = 0;
+				for (int j = 0; j < niDaq->m_iAIFreq; j++) signalMean += niDaq->m_srcData[i][j];
+				// copy data to FFTW buffer with detrend
+				for (int j = 0; j < niDaq->m_iAIFreq; j++)
+					niDaq->m_srcFFTWData[i][j][0] = niDaq->m_srcData[i][j] - (signalMean / (double)niDaq->m_iAIFreq);
+				fftw_execute(niDaq->fftPlan[i]);	// FFT calculation using FFTW
+				double specMax = -1;
+				for (int j = 0; j < niDaq->m_iNumFFTData; j++) { // calculate spectrum
+					niDaq->m_FFTData[i][j] = (2.0 / niDaq->m_iAIFreq) *
+						sqrt(niDaq->m_dstFFTWData[i][j][0] * niDaq->m_dstFFTWData[i][j][0] + niDaq->m_dstFFTWData[i][j][1] * niDaq->m_dstFFTWData[i][j][1]);
+					if (specMax < niDaq->m_FFTData[i][j]) specMax = niDaq->m_FFTData[i][j];
+				}
+				// normalize obtained spectrum
+				for (int j = 0; j < niDaq->m_iNumFFTData; j++) niDaq->m_FFTData[i][j] /= specMax;
+			}
 		}
 	}
 

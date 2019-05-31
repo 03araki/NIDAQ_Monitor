@@ -11,6 +11,8 @@
 
 /bin/*
 !/bin/data/
+/bin/data/*.csv
+!/bin/libfftw3-3.dll
 
 #########
 # general

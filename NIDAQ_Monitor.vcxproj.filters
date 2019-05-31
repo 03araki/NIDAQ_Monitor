@@ -344,8 +344,16 @@
     <ClInclude Include="src\ofNIDAQ.h">
       <Filter>src</Filter>
     </ClInclude>
+    <ClInclude Include="src\fftw3.h">
+      <Filter>src</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="icon.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="src\libfftw3-3.lib">
+      <Filter>src</Filter>
+    </Library>
   </ItemGroup>
 </Project>
